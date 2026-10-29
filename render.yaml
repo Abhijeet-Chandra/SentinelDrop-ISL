@@ -1,18 +1,14 @@
 services:
   - type: web
-    name: sentineldrop-api
+    name: sentineldrop-isl-api
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.15
-      - key: SENTINEL_DATA_DIR
-        value: /var/data
-      - key: DATABASE_URL
-        value: sqlite:////var/data/sentineldrop.db
       - key: SENTINEL_DEVICE_NAME
         value: SentinelDrop-Cloud
       - key: SENTINEL_RATE_LIMIT_DISABLED
@@ -27,7 +23,3 @@ services:
         sync: false
       - key: SENTINEL_ADMIN_PASSWORD
         sync: false
-    disk:
-      name: sentineldrop-data
-      mountPath: /var/data
-      sizeGB: 1

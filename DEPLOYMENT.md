@@ -6,7 +6,7 @@ This setup hosts the React/Vite frontend on Vercel and the FastAPI backend on Re
 
 - Publish this repository to GitHub from GitHub Desktop.
 - Create a Vercel account and a Render account.
-- The Render Blueprint includes a persistent disk and uses the `starter` service plan. Render requires a paid service plan for persistent disks. The disk keeps the SQLite database, generated identity keys, received files, and Vosk model across restarts.
+- The Render Blueprint uses the Free plan. Its SQLite database, generated identity keys, received files, and Vosk model are stored on ephemeral storage and can be lost on restart, spin-down, or redeploy. Use a paid service with a persistent disk before relying on stored data.
 
 This remains a small single-instance demo deployment. Render disks cannot be shared between multiple service instances. The browser-held identity private key is stored in IndexedDB; losing or clearing browser site data loses that identity and requires re-pairing. Keep backups of the persistent database and audit signing key. A free Render instance has ephemeral storage: its database, accounts, trusted devices, audit history, and queued messages can disappear after restart, spin-down, or redeploy. Do not treat ephemeral deployment storage as a backup. This student project has not had an independent security review.
 
@@ -23,7 +23,7 @@ The included `frontend/vercel.json` routes browser page requests to the SPA entr
 
 1. In Render, create a **Blueprint** from the same GitHub repository. Render reads `render.yaml` from the repository root.
 2. When prompted for `SENTINEL_ALLOWED_ORIGINS`, enter the exact Vercel production origin, for example `https://your-app.vercel.app` (no path or trailing slash).
-3. Review the plan and persistent disk before applying the Blueprint. The API is public on its Render URL; keep `SENTINEL_RATE_LIMIT_DISABLED` set to `0` and leave encryption demo logging disabled.
+3. Confirm the Free plan and its ephemeral storage before applying the Blueprint. The API is public on its Render URL; keep `SENTINEL_RATE_LIMIT_DISABLED` set to `0` and leave encryption demo logging disabled.
 4. Wait for the service health check at `/health` to pass. Copy the backend's `https://...onrender.com` URL.
 
 ## 3. Connect the frontend to the API
