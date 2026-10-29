@@ -25,6 +25,7 @@ from app.evaluation.security_demos import run_security_demos
 from app.monitor.sentinel import get_monitor_status
 from app.monitor.pcap_analysis import analyze_pcap_file
 from app.monitor.live_capture import live_capture_manager
+from app.monitor.http_traffic import http_request_monitor
 from app.services.audit_signature import get_audit_signing_public_key, verify_audit_signature
 from app.services.auth import get_admin_user
 from app.services.time_utils import to_utc_isoformat
@@ -403,6 +404,31 @@ def get_live_capture_status(_admin=Depends(get_admin_user)):
 @router.post("/monitor/live/stop")
 def stop_live_capture(_admin=Depends(get_admin_user)):
     return live_capture_manager.stop()
+
+
+class HttpMonitorRequest(BaseModel):
+    duration_seconds: int = 30
+    request_limit: int = 1000
+
+
+@router.post("/monitor/http/start")
+def start_http_monitor(request: HttpMonitorRequest, _admin=Depends(get_admin_user)):
+    try:
+        return http_request_monitor.start(request.duration_seconds, request.request_limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/monitor/http/status")
+def get_http_monitor_status(_admin=Depends(get_admin_user)):
+    return http_request_monitor.status()
+
+
+@router.post("/monitor/http/stop")
+def stop_http_monitor(_admin=Depends(get_admin_user)):
+    return http_request_monitor.stop()
 
 
 @router.get("/readiness")

@@ -14,6 +14,7 @@ import {
   getAdminReadiness,
   getAdminLiveCaptureInterfaces,
   getAdminLiveCaptureStatus,
+  getAdminHttpMonitorStatus,
   getLocalPairingInfo,
   getMyPairingQrObjectUrl,
   getPairedFingerprintKey,
@@ -40,7 +41,9 @@ import {
   runAdminSecurityDemos,
   runAdminVoiceBenchmark,
   startAdminLiveCapture,
+  startAdminHttpMonitor,
   stopAdminLiveCapture,
+  stopAdminHttpMonitor,
   runAdminTextAnalysis,
   sendMessage,
   verifyAudit,
@@ -146,6 +149,9 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
   const [liveCapture, setLiveCapture] = useState(null)
   const [captureInterface, setCaptureInterface] = useState('')
   const [captureError, setCaptureError] = useState('')
+  const [packetCaptureNotice, setPacketCaptureNotice] = useState('')
+  const [httpMonitor, setHttpMonitor] = useState(null)
+  const [httpMonitorError, setHttpMonitorError] = useState('')
   const [monitorError, setMonitorError] = useState('')
   const [analysisError, setAnalysisError] = useState('')
   const [imageMetrics, setImageMetrics] = useState(null)
@@ -217,13 +223,24 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
     }
   }, [])
 
+  const refreshHttpMonitor = useCallback(async () => {
+    try {
+      setHttpMonitor(await getAdminHttpMonitorStatus())
+    } catch (err) {
+      setHttpMonitorError(err.message || 'Unable to load HTTP monitor status.')
+    }
+  }, [])
+
   const loadLiveInterfaces = useCallback(async () => {
     try {
       const result = await getAdminLiveCaptureInterfaces()
       setLiveInterfaces(result.interfaces || [])
       setCaptureInterface((current) => current || result.interfaces?.[0] || '')
+      setPacketCaptureNotice('')
     } catch (err) {
-      setCaptureError(err.message || 'TShark interfaces are unavailable.')
+      setLiveInterfaces([])
+      setCaptureInterface('')
+      setPacketCaptureNotice(err.message || 'TShark interfaces are unavailable on this backend host.')
     }
   }, [])
 
@@ -234,15 +251,22 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
       void refreshReadiness()
       void loadLiveInterfaces()
       void refreshLiveCapture()
+      void refreshHttpMonitor()
     }, 0)
     return () => window.clearTimeout(refreshTimer)
-  }, [refreshLogs, refreshMonitor, refreshReadiness, loadLiveInterfaces, refreshLiveCapture])
+  }, [refreshLogs, refreshMonitor, refreshReadiness, loadLiveInterfaces, refreshLiveCapture, refreshHttpMonitor])
 
   useEffect(() => {
     if (!['running', 'stopping'].includes(liveCapture?.status)) return undefined
     const timer = window.setInterval(() => { void refreshLiveCapture() }, 1000)
     return () => window.clearInterval(timer)
   }, [liveCapture?.status, refreshLiveCapture])
+
+  useEffect(() => {
+    if (httpMonitor?.status !== 'running') return undefined
+    const timer = window.setInterval(() => { void refreshHttpMonitor() }, 1000)
+    return () => window.clearInterval(timer)
+  }, [httpMonitor?.status, refreshHttpMonitor])
 
   async function handleRunImageMetrics() {
     if (!selectedAnalysisImage) {
@@ -371,6 +395,24 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
     }
   }
 
+  async function handleStartHttpMonitor() {
+    setHttpMonitorError('')
+    try {
+      setHttpMonitor(await startAdminHttpMonitor())
+    } catch (err) {
+      setHttpMonitorError(err.message || 'Unable to start HTTP request monitor.')
+    }
+  }
+
+  async function handleStopHttpMonitor() {
+    setHttpMonitorError('')
+    try {
+      setHttpMonitor(await stopAdminHttpMonitor())
+    } catch (err) {
+      setHttpMonitorError(err.message || 'Unable to stop HTTP request monitor.')
+    }
+  }
+
   async function handleRunSecurityDemos() {
     setSecurityDemosLoading(true)
     setAnalysisError('')
@@ -413,6 +455,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
       ed25519_signature_demo: signatureDemo,
       pcap_summary: pcapResult,
       live_capture_summary: liveCapture,
+      application_http_summary: httpMonitor,
       deployment_readiness: readiness,
       controlled_security_demonstrations: securityDemos,
       offline_voice_benchmark: voiceBenchmark,
@@ -524,9 +567,9 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
             </article>
 
             <article className="admin-analysis-card">
-              <div className="admin-analysis-heading"><div><span className="eyebrow">SENTINEL MONITOR</span><h3>Bounded live capture</h3></div><button className="secondary-button" type="button" onClick={loadLiveInterfaces}>Refresh interfaces</button></div>
+              <div className="admin-analysis-heading"><div><span className="eyebrow">SENTINEL MONITOR · HOST CAPTURE</span><h3>TShark packet capture</h3></div><button className="secondary-button" type="button" onClick={loadLiveInterfaces}>Refresh interfaces</button></div>
               <p>Captures on the backend host for at most 10 seconds or 1,000 packets. Only aggregate counts are shown; packet contents and endpoint addresses are not retained. Use only on an interface you are authorized to monitor.</p>
-              {liveInterfaces.length ? <label className="admin-file-picker">Capture interface<select value={captureInterface} onChange={(event) => setCaptureInterface(event.target.value)}>{liveInterfaces.map((name) => <option key={name} value={name}>{name}</option>)}</select></label> : <p className="admin-analysis-note">No TShark interfaces are available. Install TShark and the operating system's capture driver, then refresh.</p>}
+              {liveInterfaces.length ? <label className="admin-file-picker">Capture interface<select value={captureInterface} onChange={(event) => setCaptureInterface(event.target.value)}>{liveInterfaces.map((name) => <option key={name} value={name}>{name}</option>)}</select></label> : <p className="admin-analysis-note">{packetCaptureNotice || 'No TShark interfaces are available on this backend host.'} The live API request monitor below works on the deployed service without TShark.</p>}
               {captureError && <div className="alert error">{captureError}</div>}
               <div className="admin-action-row">
                 <button className="secondary-button" type="button" onClick={handleStartLiveCapture} disabled={!captureInterface || ['running', 'stopping'].includes(liveCapture?.status)}>Start 10-second capture</button>
@@ -542,6 +585,27 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                 {Object.keys(liveCapture.protocol_counts || {}).length > 0 && <MetricBarChart title="Captured packets by protocol" unit=" packets" rows={Object.entries(liveCapture.protocol_counts).map(([label, value]) => ({ label, value }))} />}
                 {liveCapture.error && <div className="alert error">{liveCapture.error}</div>}
                 <p className="admin-analysis-note">{liveCapture.note}</p>
+              </>}
+            </article>
+
+            <article className="admin-analysis-card">
+              <div className="admin-analysis-heading"><div><span className="eyebrow">SENTINEL MONITOR · HOSTED</span><h3>Live API request monitor</h3></div><button className="secondary-button" type="button" onClick={refreshHttpMonitor}>Refresh</button></div>
+              <p>Measures requests handled by this backend for up to 30 seconds or 1,000 requests. Open the app on another device and send a message while it runs. This is application traffic, not a packet capture.</p>
+              {httpMonitorError && <div className="alert error">{httpMonitorError}</div>}
+              <div className="admin-action-row">
+                <button className="secondary-button" type="button" onClick={handleStartHttpMonitor} disabled={httpMonitor?.status === 'running'}>Start 30-second monitor</button>
+                <button className="secondary-button" type="button" onClick={handleStopHttpMonitor} disabled={httpMonitor?.status !== 'running'}>Stop monitor</button>
+              </div>
+              {httpMonitor && <>
+                <div className="admin-metric-grid">
+                  <div><span>Status</span><strong>{httpMonitor.status}</strong></div>
+                  <div><span>Requests</span><strong>{httpMonitor.request_count}</strong></div>
+                  <div><span>Request body bytes</span><strong>{httpMonitor.request_bytes.toLocaleString()}</strong></div>
+                  <div><span>Response body bytes</span><strong>{httpMonitor.response_bytes.toLocaleString()}</strong></div>
+                  <div><span>Peak rate</span><strong>{httpMonitor.peak_requests_per_second} req/s</strong></div>
+                </div>
+                {Object.keys(httpMonitor.status_counts || {}).length > 0 && <MetricBarChart title="API responses by status" unit=" requests" rows={Object.entries(httpMonitor.status_counts).map(([label, value]) => ({ label, value }))} />}
+                <p className="admin-analysis-note">{httpMonitor.note}</p>
               </>}
             </article>
 

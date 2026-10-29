@@ -10,6 +10,8 @@ This setup hosts the React/Vite frontend on Vercel and the FastAPI backend on Re
 
 This remains a small single-instance demo deployment. Render disks cannot be shared between multiple service instances. The browser-held identity private key is stored in IndexedDB; losing or clearing browser site data loses that identity and requires re-pairing. Keep backups of the persistent database and audit signing key. A free Render instance has ephemeral storage: its database, accounts, trusted devices, audit history, and queued messages can disappear after restart, spin-down, or redeploy. Do not treat ephemeral deployment storage as a backup. This student project has not had an independent security review.
 
+The deployed Admin dashboard's **Live API request monitor** works without TShark. It counts only requests handled by this FastAPI process during a bounded window; its byte totals come from Content-Length headers and are not packet or network-byte measurements. The separate TShark packet-capture control still needs a host with TShark and capture permissions, and may be unavailable on Render. Both monitors lose their in-memory run state when the process restarts.
+
 ## 1. Deploy the frontend on Vercel
 
 1. Import the GitHub repository into Vercel.

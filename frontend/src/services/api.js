@@ -236,6 +236,21 @@ export async function stopAdminLiveCapture() {
   return authenticatedFetch('/admin/monitor/live/stop', { method: 'POST' })
 }
 
+export async function getAdminHttpMonitorStatus() {
+  return authenticatedFetch('/admin/monitor/http/status')
+}
+
+export async function startAdminHttpMonitor() {
+  return authenticatedFetch('/admin/monitor/http/start', {
+    method: 'POST',
+    body: { duration_seconds: 30, request_limit: 1000 },
+  })
+}
+
+export async function stopAdminHttpMonitor() {
+  return authenticatedFetch('/admin/monitor/http/stop', { method: 'POST' })
+}
+
 export async function runAdminImageMetrics(file) {
   const body = new FormData()
   body.append('image', file)

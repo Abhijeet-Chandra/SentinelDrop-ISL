@@ -23,6 +23,7 @@ from app.api.files import router as files_router
 from app.api.voice import router as voice_router
 from app.api.devices import router as devices_router
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.monitor.http_traffic import declared_content_bytes, http_request_monitor
 from app.services.admin_bootstrap import ensure_admin_account
 
 os.environ.setdefault("SENTINEL_DEVICE_NAME", "SentinelDrop-A")
@@ -74,6 +75,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def monitor_application_http(request, call_next):
+    request_bytes = declared_content_bytes(request.headers.get("content-length"))
+    try:
+        response = await call_next(request)
+    except Exception:
+        http_request_monitor.record(
+            path=request.url.path,
+            status_code=500,
+            request_bytes=request_bytes,
+            response_bytes=0,
+        )
+        raise
+    http_request_monitor.record(
+        path=request.url.path,
+        status_code=response.status_code,
+        request_bytes=request_bytes,
+        response_bytes=declared_content_bytes(response.headers.get("content-length")),
+    )
+    return response
 
 Base.metadata.create_all(bind=engine)
 init_db()
