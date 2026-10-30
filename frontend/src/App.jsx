@@ -1252,7 +1252,13 @@ function App() {
       for (const item of queued) {
         if (item.transfer_kind === 'file') {
           const received = await receiveFile(item)
-          downloadedFiles.push(received)
+          downloadedFiles.push({
+            filename: received.filename,
+            size: received.size,
+            object_url: received.object_url,
+            message_type: received.message_type,
+            sequence_number: received.sequence_number,
+          })
           setMessages((current) => [
             ...current,
             {
@@ -1276,7 +1282,7 @@ function App() {
         }
       }
       if (downloadedFiles.length) {
-        setFiles((current) => [...downloadedFiles, ...current])
+        setFiles((current) => [...downloadedFiles.map((file) => ({ ...file, direction: 'received' })), ...current])
       }
       await refreshSecurity()
     } catch (err) {
@@ -1547,11 +1553,19 @@ function App() {
       const encrypted = await prepareFile(sessionId, file, kind)
       setFileName(encrypted.filename || file.name)
       setSelectedFile(null)
+      setFiles((current) => [{
+        filename: file.name,
+        size: file.size,
+        blob: file,
+        direction: 'sent',
+        message_type: kind,
+        sequence_number: encrypted.sequence_number,
+      }, ...current])
       setTransferStatus(`Encrypted ${kind} queued. Waiting for the other device to receive it.`)
       setMessages((current) => [
         ...current,
         {
-          text: `Encrypted ${kind} sent: ${encrypted.filename}`,
+          text: `Encrypted ${kind} sent: ${file.name}`,
           sequence: encrypted.sequence_number,
           sent: true,
           type: kind,
@@ -1698,6 +1712,9 @@ function App() {
     setMode('login')
     setPassword('')
     setMessages([])
+    files.forEach((file) => {
+      if (file.object_url) URL.revokeObjectURL(file.object_url)
+    })
     setFiles([])
     setMessageText('')
     setPairingInput('')
@@ -1994,23 +2011,25 @@ function App() {
           )}
           {files.length > 0 && (
             <div className="message-list">
-              {files.map((file) => (
-                <article className="message-item" key={file.filename}>
+              <h3>Files available to download in this tab</h3>
+              {files.map((file, index) => (
+                <article className="message-item" key={`${file.direction}-${file.sequence_number}-${index}`}>
                   <div>
-                    <strong>file</strong>
+                    <strong>{file.direction} · {file.message_type || 'file'}</strong>
                     <span>{file.size} bytes</span>
                   </div>
                   <p>
+                    <span>{file.filename}</span>{' '}
                     <button
-                      className="link-button"
+                      className="secondary-button"
                       type="button"
                       onClick={() =>
-                        downloadReceivedFile(file.filename).catch((err) =>
+                        downloadReceivedFile(file).catch((err) =>
                           setError(err.message || 'Unable to download the file.')
                         )
                       }
                     >
-                      {file.filename}
+                      Download
                     </button>
                   </p>
                 </article>

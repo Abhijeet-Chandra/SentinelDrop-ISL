@@ -443,35 +443,19 @@ export function receivedFileUrl(filename) {
   return `${API_BASE_URL}/files/received/${encodeURIComponent(filename)}`
 }
 
-export async function downloadReceivedFile(filename) {
-  if (typeof filename === 'object' && filename.object_url) {
-    const anchor = document.createElement('a')
-    anchor.href = filename.object_url
-    anchor.download = filename.filename
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    return
+export async function downloadReceivedFile(file) {
+  const temporaryUrl = file?.blob instanceof Blob ? URL.createObjectURL(file.blob) : null
+  const downloadUrl = file?.object_url || temporaryUrl
+  if (!downloadUrl) {
+    throw new Error('This file is no longer available in this browser tab.')
   }
-  const token = getStoredToken()
-  const response = await fetch(receivedFileUrl(filename), {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}))
-    throw new Error(
-      typeof data.detail === 'string' ? data.detail : 'Unable to download the file.'
-    )
-  }
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
+  const anchor = document.createElement('a')
+  anchor.href = downloadUrl
+  anchor.download = file.filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  if (temporaryUrl) window.setTimeout(() => URL.revokeObjectURL(temporaryUrl), 60_000)
 }
 
 export async function prepareFile(session, file, messageType = 'image') {
