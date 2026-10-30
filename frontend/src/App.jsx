@@ -649,7 +649,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
 
             <article className="admin-analysis-card">
               <div className="admin-analysis-heading"><div><span className="eyebrow">TRAFFIC ANALYSIS</span><h3>Offline PCAP review</h3></div></div>
-              <p>Upload a capture up to 20 MB. Analysis is administrator-only, limited to 50,000 packets, and the uploaded file is deleted after processing. Requires PyShark and TShark on the backend.</p>
+              <p>Upload a capture up to 20 MB. Analysis is administrator-only, limited to 50,000 packets, and the uploaded file is deleted after processing. Offline analysis runs directly on the backend; TShark is not required.</p>
               <label className="admin-file-picker">Choose packet capture<input type="file" accept=".pcap,.pcapng,.cap" onChange={(event) => { setPcapFile(event.target.files?.[0] || null); setPcapResult(null) }} /></label>
               {pcapFile && <p className="admin-result-caption">{pcapFile.name} · {pcapFile.size.toLocaleString()} bytes</p>}
               <button className="secondary-button" type="button" onClick={handleRunPcapAnalysis} disabled={!pcapFile || pcapLoading}>{pcapLoading ? 'Analyzing capture…' : 'Analyze capture'}</button>

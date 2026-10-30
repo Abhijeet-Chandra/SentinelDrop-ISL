@@ -23,3 +23,5 @@ matplotlib
 
 pytest
 httpx
+
+dpkt==1.9.8

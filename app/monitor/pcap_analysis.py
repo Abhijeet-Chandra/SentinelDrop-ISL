@@ -54,32 +54,52 @@ def summarize_packets(packets) -> dict:
 
 
 def analyze_pcap_file(path) -> dict:
-    try:
-        import pyshark
-    except Exception as exc:
-        raise RuntimeError("PyShark is not installed; PCAP analysis is unavailable.") from exc
+    """Read offline captures in-process; no TShark executable is required."""
+    import dpkt
+    import socket
+    from itertools import islice
 
-    capture = None
+    rows = []
+    undecoded = 0
     try:
-        capture = pyshark.FileCapture(str(path), keep_packets=False)
-        rows = []
-        for packet in capture:
-            layers = {str(layer.layer_name).upper() for layer in packet.layers}
-            network_layer = getattr(packet, "ip", None) or getattr(packet, "ipv6", None)
-            rows.append({
-                "timestamp": float(packet.sniff_timestamp),
-                "length": int(packet.length),
-                "protocol": next((name for name in ("HTTP", "TLS", "DNS", "TCP", "UDP", "ICMP") if name in layers), "OTHER"),
-                "source": getattr(network_layer, "src", None) if network_layer else None,
-                "destination": getattr(network_layer, "dst", None) if network_layer else None,
-            })
-            if len(rows) >= MAX_PCAP_PACKETS:
-                break
-        return summarize_packets(rows)
-    except ValueError:
-        raise
-    except Exception as exc:
-        raise ValueError("Could not parse this capture. Check that it is a supported PCAP/PCAPNG file and TShark is installed.") from exc
-    finally:
-        if capture is not None:
-            capture.close()
+        with open(path, "rb") as source:
+            reader = dpkt.pcap.UniversalReader(source)
+            linktype = reader.datalink()
+            for timestamp, raw in islice(reader, MAX_PCAP_PACKETS):
+                row = {"timestamp": float(timestamp), "length": len(raw), "protocol": "OTHER"}
+                try:
+                    if linktype == 1:
+                        network = dpkt.ethernet.Ethernet(raw).data
+                    elif linktype == 113:
+                        network = dpkt.sll.SLL(raw).data
+                    elif linktype in (0, 108):
+                        network = dpkt.loopback.Loopback(raw).data
+                    elif linktype in (12, 101, 228, 229):
+                        network = dpkt.ip6.IP6(raw) if raw[0] >> 4 == 6 else dpkt.ip.IP(raw)
+                    else:
+                        network = None
+                    if isinstance(network, (dpkt.ip.IP, dpkt.ip6.IP6)):
+                        family = socket.AF_INET6 if len(network.src) == 16 else socket.AF_INET
+                        row["source"] = socket.inet_ntop(family, network.src)
+                        row["destination"] = socket.inet_ntop(family, network.dst)
+                        transport = network.data
+                        if isinstance(transport, dpkt.tcp.TCP):
+                            row["protocol"] = "TCP"
+                        elif isinstance(transport, dpkt.udp.UDP):
+                            row["protocol"] = "UDP"
+                        elif isinstance(transport, (dpkt.icmp.ICMP, dpkt.icmp6.ICMP6)):
+                            row["protocol"] = "ICMP"
+                    elif isinstance(network, dpkt.arp.ARP):
+                        row["protocol"] = "ARP"
+                    if row["protocol"] == "OTHER":
+                        undecoded += 1
+                except (dpkt.UnpackError, ValueError, IndexError, socket.error):
+                    undecoded += 1
+                rows.append(row)
+        result = summarize_packets(rows)
+        result["parser"] = "dpkt"
+        result["unclassified_packets"] = undecoded
+        result["note"] += " Protocols are classified at the network/transport layer; TLS and HTTP inside TCP are not separately dissected. Bytes reflect captured bytes. Unrecognized packets remain OTHER."
+        return result
+    except (dpkt.UnpackError, ValueError, IndexError, EOFError) as exc:
+        raise ValueError("Unable to read this capture. Save it as PCAP or PCAPNG in Wireshark and retry; the file may be empty, truncated, or unsupported.") from exc
