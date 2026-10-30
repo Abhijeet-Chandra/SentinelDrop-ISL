@@ -1183,6 +1183,7 @@ function App() {
   const [files, setFiles] = useState([])
   const [messageLoading, setMessageLoading] = useState(false)
   const [transferError, setTransferError] = useState('')
+  const [inboxError, setInboxError] = useState('')
   const [transferStatus, setTransferStatus] = useState('')
   const [localPayload, setLocalPayload] = useState('')
   const [localFingerprint, setLocalFingerprint] = useState('')
@@ -1236,29 +1237,31 @@ function App() {
   }, [])
 
   const pullInbox = useCallback(async ({ showError = false } = {}) => {
-    if (!pairingConfirmed || inboxBusy.current) {
+    if (!getStoredPeerPublicKey() || inboxBusy.current) {
       return
     }
     inboxBusy.current = true
     let hadPending = false
     try {
       const pending = await listPendingMessages()
-      const downloadedFiles = []
+      const failures = []
       const queued = [...(pending.messages || [])].sort((left, right) => {
         const sessionOrder = String(left.session_id).localeCompare(String(right.session_id))
         return sessionOrder || left.sequence_number - right.sequence_number
       })
       hadPending = queued.length > 0
       for (const item of queued) {
+        try {
         if (item.transfer_kind === 'file') {
           const received = await receiveFile(item)
-          downloadedFiles.push({
+          setFiles((current) => [{
             filename: received.filename,
             size: received.size,
             object_url: received.object_url,
             message_type: received.message_type,
             sequence_number: received.sequence_number,
-          })
+            direction: 'received',
+          }, ...current])
           setMessages((current) => [
             ...current,
             {
@@ -1280,13 +1283,15 @@ function App() {
             },
           ])
         }
+        } catch (err) {
+          failures.push(`Transfer #${item.sequence_number}: ${err.message || 'decryption failed'}`)
+        }
       }
-      if (downloadedFiles.length) {
-        setFiles((current) => [...downloadedFiles.map((file) => ({ ...file, direction: 'received' })), ...current])
-      }
+      setInboxError(failures.length ? `${failures.length} incoming transfer(s) could not be opened. Other transfers continue. ${failures[0]}` : '')
       await refreshSecurity()
     } catch (err) {
       if (showError || hadPending) {
+        setInboxError(err.message || 'Unable to refresh inbox.')
         setError(hadPending
           ? `Incoming transfer could not be opened: ${err.message || 'decryption failed'}. Check that both devices are paired with their current identities.`
           : err.message || 'Unable to refresh inbox.')
@@ -1294,7 +1299,7 @@ function App() {
     } finally {
       inboxBusy.current = false
     }
-  }, [pairingConfirmed, refreshSecurity])
+  }, [refreshSecurity])
 
   useEffect(() => {
     if (!authenticated) {
@@ -1928,7 +1933,8 @@ function App() {
           </div>
 
           <form className="message-form" onSubmit={handleSendMessage}>
-            {transferError && <div className="alert error" role="alert">Send failed: {transferError} Both devices must confirm each other’s current fingerprints.</div>}
+            {transferError && <div className="alert error" role="alert">Transfer issue: {transferError}</div>}
+            {inboxError && <div className="alert error" role="alert">Inbox: {inboxError}</div>}
             {transferStatus && <div className="alert success" role="status">{transferStatus}</div>}
             <textarea
               value={messageText}
