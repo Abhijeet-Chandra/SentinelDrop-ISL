@@ -1211,6 +1211,28 @@ function App() {
   const scanHandledRef = useRef(false)
   const voiceCaptureRef = useRef(null)
 
+  useEffect(() => {
+    const expireSession = () => {
+      setAuthenticated(false)
+      setIsAdmin(false)
+      setMode('login')
+      setPairingConfirmed(false)
+      setTransferStatus('')
+      setTransferError('')
+      setInboxError('')
+      setMessages([])
+      files.forEach((file) => {
+        if (file.object_url) URL.revokeObjectURL(file.object_url)
+      })
+      setFiles([])
+      setPassword('')
+      setSuccess('')
+      setError('Your server session expired or was reset. Sign in again to continue. If your account no longer exists, register it again.')
+    }
+    window.addEventListener('sentineldrop-session-expired', expireSession)
+    return () => window.removeEventListener('sentineldrop-session-expired', expireSession)
+  }, [files])
+
   useEffect(() => () => {
     if (voiceCaptureRef.current) {
       releaseVoiceCapture(voiceCaptureRef.current)

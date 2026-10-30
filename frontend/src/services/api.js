@@ -150,6 +150,13 @@ export async function authenticatedFetch(path, options = {}) {
     headers,
   })
 
+  if (response.status === 401 && getStoredToken() === token) {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(ADMIN_KEY)
+    window.dispatchEvent(new Event('sentineldrop-session-expired'))
+  }
+
   return parseResponse(response)
 }
 
