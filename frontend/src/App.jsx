@@ -1182,6 +1182,8 @@ function App() {
   const [messages, setMessages] = useState([])
   const [files, setFiles] = useState([])
   const [messageLoading, setMessageLoading] = useState(false)
+  const [transferError, setTransferError] = useState('')
+  const [transferStatus, setTransferStatus] = useState('')
   const [localPayload, setLocalPayload] = useState('')
   const [localFingerprint, setLocalFingerprint] = useState('')
   const [localQrUrl, setLocalQrUrl] = useState('')
@@ -1222,7 +1224,7 @@ function App() {
     try {
       const dash = await getSecurityDashboard()
       setDashboard(dash)
-      const trusted = Boolean(dash.trusted_devices?.length)
+      const trusted = dash.trusted_devices?.some((device) => device.public_key === getStoredPeerPublicKey())
       setPairingConfirmed(trusted && Boolean(getStoredPeerPublicKey()))
     } catch (err) {
       setDashboard(null)
@@ -1338,7 +1340,7 @@ function App() {
           if (data.is_admin) return
           const dash = await getSecurityDashboard()
           setDashboard(dash)
-          const trusted = Boolean(dash.trusted_devices?.length)
+          const trusted = dash.trusted_devices?.some((device) => device.public_key === getStoredPeerPublicKey())
           setPairingConfirmed(trusted && Boolean(getStoredPeerPublicKey()))
         } catch {
           setPairingConfirmed(
@@ -1490,8 +1492,11 @@ function App() {
     }
     setMessageLoading(true)
     setError('')
+    setTransferError('')
+    setTransferStatus('Opening a secure session…')
     try {
       const sessionId = await ensureSession()
+      setTransferStatus('Encrypting and sending…')
       const messageType = pendingMessageType
       const data = await sendMessage(sessionId, messageText.trim(), messageType)
       setMessages((current) => [
@@ -1500,9 +1505,12 @@ function App() {
       ])
       setMessageText('')
       setPendingMessageType('text')
+      setTransferStatus('Encrypted message queued. Waiting for the other device to receive it.')
       await refreshSecurity()
     } catch (err) {
       localStorage.removeItem('sentineldrop_session_id')
+      setTransferStatus('')
+      setTransferError(err.message || 'Unable to establish a secure session or send the message.')
       setError(err.message || 'Unable to establish a secure session or send the message.')
     } finally {
       setMessageLoading(false)
@@ -1526,6 +1534,8 @@ function App() {
     const file = selectedFile
     setMessageLoading(true)
     setError('')
+    setTransferError('')
+    setTransferStatus(`Encrypting and sending ${file.name}…`)
     setSuccess(`Encrypting and sending ${file.name}...`)
     try {
       const sessionId = await ensureSession()
@@ -1537,6 +1547,7 @@ function App() {
       const encrypted = await prepareFile(sessionId, file, kind)
       setFileName(encrypted.filename || file.name)
       setSelectedFile(null)
+      setTransferStatus(`Encrypted ${kind} queued. Waiting for the other device to receive it.`)
       setMessages((current) => [
         ...current,
         {
@@ -1549,6 +1560,8 @@ function App() {
       setSuccess(`Encrypted ${kind} sent.`)
     } catch (err) {
       localStorage.removeItem('sentineldrop_session_id')
+      setTransferStatus('')
+      setTransferError(err.message || 'Unable to transfer the file.')
       setError(err.message || 'Unable to transfer the file.')
     } finally {
       setMessageLoading(false)
@@ -1898,6 +1911,8 @@ function App() {
           </div>
 
           <form className="message-form" onSubmit={handleSendMessage}>
+            {transferError && <div className="alert error" role="alert">Send failed: {transferError} Both devices must confirm each other’s current fingerprints.</div>}
+            {transferStatus && <div className="alert success" role="status">{transferStatus}</div>}
             <textarea
               value={messageText}
               onChange={(event) => {
