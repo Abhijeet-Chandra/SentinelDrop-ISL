@@ -4,6 +4,7 @@ import {
   encryptBytes,
   loadClientIdentity,
   getOrCreateClientIdentity,
+  incomingTransferMetadata,
 } from './e2ee'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
@@ -395,11 +396,7 @@ export async function receiveMessage(encryptedMessage) {
     encryptedMessage.sender_user_id,
     encryptedMessage.recipient_user_id,
   )
-  const metadata = createTransferMetadata(
-    { session_id: encryptedMessage.session_id, local_user_id: encryptedMessage.recipient_user_id, peer_user_id: encryptedMessage.sender_user_id },
-    encryptedMessage.sequence_number,
-    encryptedMessage.message_type,
-  )
+  const metadata = incomingTransferMetadata(encryptedMessage)
   const plaintext = await decryptBytes(key, encryptedMessage, metadata)
   await authenticatedFetch('/messages/receive', {
     method: 'POST',
@@ -421,16 +418,7 @@ export async function receiveFile(encryptedFile) {
     encryptedFile.sender_user_id,
     encryptedFile.recipient_user_id,
   )
-  const metadata = createTransferMetadata(
-    { session_id: encryptedFile.session_id, local_user_id: encryptedFile.recipient_user_id, peer_user_id: encryptedFile.sender_user_id },
-    encryptedFile.sequence_number,
-    encryptedFile.message_type,
-    {
-      filename: encryptedFile.filename,
-      mime_type: encryptedFile.mime_type,
-      file_size: encryptedFile.file_size,
-    },
-  )
+  const metadata = incomingTransferMetadata(encryptedFile)
   const plaintext = await decryptBytes(key, encryptedFile, metadata)
   await authenticatedFetch('/files/receive-encrypted', {
     method: 'POST',

@@ -49,6 +49,22 @@ function canonicalMetadata(metadata) {
   return TEXT_ENCODER.encode(JSON.stringify(normalized))
 }
 
+export function incomingTransferMetadata(encrypted) {
+  const metadata = {
+    session_id: encrypted.session_id,
+    sequence_number: encrypted.sequence_number,
+    message_type: encrypted.message_type,
+    sender_user_id: encrypted.sender_user_id,
+    recipient_user_id: encrypted.recipient_user_id,
+  }
+  if (encrypted.filename) {
+    metadata.filename = encrypted.filename
+    metadata.mime_type = encrypted.mime_type
+    metadata.file_size = encrypted.file_size
+  }
+  return metadata
+}
+
 export async function generateClientKeyPair() {
   const pair = await webCrypto().subtle.generateKey(
     { name: 'X25519' },

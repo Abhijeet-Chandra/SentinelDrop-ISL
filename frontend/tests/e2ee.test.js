@@ -8,6 +8,7 @@ import {
   exportPublicKeyBase64,
   exportRawPublicKey,
   generateClientKeyPair,
+  incomingTransferMetadata,
 } from '../src/services/e2ee.js'
 
 test('two clients derive a matching key and AES-GCM authenticates transfer metadata', async () => {
@@ -34,6 +35,25 @@ test('two clients derive a matching key and AES-GCM authenticates transfer metad
   await assert.rejects(
     decryptBytes(bobKey, encrypted, { ...metadata, recipient_user_id: 12 }),
   )
+})
+
+test('receiver authenticates the original sender and recipient for text and files', async () => {
+  const sender = await generateClientKeyPair()
+  const receiver = await generateClientKeyPair()
+  const senderPublic = await exportPublicKeyBase64(sender.publicKey)
+  const receiverPublic = await exportPublicKeyBase64(receiver.publicKey)
+  const senderKey = await deriveSessionCryptoKey(sender.privateKey, receiverPublic, 'session-456', 10, 11)
+  const receiverKey = await deriveSessionCryptoKey(receiver.privateKey, senderPublic, 'session-456', 10, 11)
+  for (const extra of [{}, { filename: 'report.txt', mime_type: 'text/plain', file_size: 5 }]) {
+    const metadata = {
+      session_id: 'session-456', sequence_number: 2, message_type: 'text',
+      sender_user_id: 10, recipient_user_id: 11, ...extra,
+    }
+    const encrypted = await encryptBytes(senderKey, new TextEncoder().encode('hello'), metadata)
+    const received = { ...metadata, ...encrypted }
+    assert.deepEqual(incomingTransferMetadata(received), metadata)
+    assert.equal(new TextDecoder().decode(await decryptBytes(receiverKey, received, incomingTransferMetadata(received))), 'hello')
+  }
 })
 
 test('browser identity private keys are non-extractable and public keys remain exportable', async () => {

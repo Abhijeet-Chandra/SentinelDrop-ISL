@@ -1223,11 +1223,13 @@ function App() {
       const dash = await getSecurityDashboard()
       setDashboard(dash)
       const trusted = Boolean(dash.trusted_devices?.length)
-      if (trusted && getStoredPeerPublicKey()) {
-        setPairingConfirmed(true)
-      }
-    } catch {
+      setPairingConfirmed(trusted && Boolean(getStoredPeerPublicKey()))
+    } catch (err) {
       setDashboard(null)
+      if (/token|authenticated user not found/i.test(err.message || '')) {
+        setPairingConfirmed(false)
+        setError('This server session is no longer valid. Sign out, sign in again, then pair both devices again.')
+      }
     }
   }, [])
 
@@ -1236,6 +1238,7 @@ function App() {
       return
     }
     inboxBusy.current = true
+    let hadPending = false
     try {
       const pending = await listPendingMessages()
       const downloadedFiles = []
@@ -1243,6 +1246,7 @@ function App() {
         const sessionOrder = String(left.session_id).localeCompare(String(right.session_id))
         return sessionOrder || left.sequence_number - right.sequence_number
       })
+      hadPending = queued.length > 0
       for (const item of queued) {
         if (item.transfer_kind === 'file') {
           const received = await receiveFile(item)
@@ -1274,8 +1278,10 @@ function App() {
       }
       await refreshSecurity()
     } catch (err) {
-      if (showError) {
-        setError(err.message || 'Unable to decrypt inbox.')
+      if (showError || hadPending) {
+        setError(hadPending
+          ? `Incoming transfer could not be opened: ${err.message || 'decryption failed'}. Check that both devices are paired with their current identities.`
+          : err.message || 'Unable to refresh inbox.')
       }
     } finally {
       inboxBusy.current = false
