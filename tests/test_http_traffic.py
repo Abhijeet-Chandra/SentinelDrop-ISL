@@ -27,6 +27,7 @@ def test_http_monitor_counts_requests_without_retaining_paths_or_payloads():
     assert result["response_bytes"] == 14
     assert result["status_counts"] == {"2xx": 1, "4xx": 1}
     assert result["peak_requests_per_second"] == 1
+    assert result["requests_per_second"] == [1, 1]
     assert "private-id" not in str(result)
     assert "secret" not in str(result)
 
@@ -50,6 +51,7 @@ def test_http_monitor_expires_and_enforces_bounds():
     clock[0] += 3
     monitor.record(path="/auth/login", status_code=200, request_bytes=1, response_bytes=2)
     assert monitor.status()["request_count"] == 1
+    assert monitor.status()["requests_per_second"] == [1, 0]
 
     monitor.start(duration_seconds=2, request_limit=3)
     clock[0] += 3

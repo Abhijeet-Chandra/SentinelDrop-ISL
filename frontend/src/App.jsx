@@ -93,6 +93,37 @@ function MetricBarChart({ title, rows, unit = '%' }) {
   )
 }
 
+function MetricTrendChart({ title, rows, unit = '' }) {
+  const samples = rows.filter((row) => Number.isFinite(Number(row.value)))
+  if (!samples.length) return null
+  const values = samples.map((row) => Number(row.value))
+  const low = Math.min(0, ...values)
+  const high = Math.max(1, ...values)
+  const spread = high - low || 1
+  const points = samples.map((row, index) => ({
+    x: 42 + (index / Math.max(1, samples.length - 1)) * 528,
+    y: 142 - ((Number(row.value) - low) / spread) * 112,
+  }))
+  const line = points.map(({ x, y }) => `${x},${y}`).join(' ')
+  const area = `42,142 ${line} ${points.at(-1).x},142`
+  return (
+    <div className="analysis-chart analysis-trend" role="img" aria-label={`${title}. ${samples.map((row) => `${row.label}: ${row.value}${unit}`).join(', ')}`}>
+      <strong>{title}</strong>
+      <svg viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <line className="trend-grid" x1="42" y1="30" x2="570" y2="30" />
+        <line className="trend-grid" x1="42" y1="86" x2="570" y2="86" />
+        <line className="trend-grid" x1="42" y1="142" x2="570" y2="142" />
+        <polygon className="trend-fill" points={area} />
+        <polyline className="trend-line" points={line} />
+        {points.map((point, index) => <circle className="trend-point" key={index} cx={point.x} cy={point.y} r="3.5" />)}
+        <text x="0" y="34">{high.toFixed(high < 10 ? 1 : 0)}</text>
+        <text x="15" y="146">{low.toFixed(low < 10 ? 1 : 0)}</text>
+      </svg>
+      <div className="trend-labels"><span>{samples[0].label}</span><span>{samples.length > 1 ? samples.at(-1).label : `${values[0].toFixed(2)}${unit}`}</span></div>
+    </div>
+  )
+}
+
 function resampleVoice(samples, sourceRate, targetRate = 16000) {
   if (sourceRate === targetRate) return samples
   const outputLength = Math.floor((samples.length * targetRate) / sourceRate)
@@ -525,6 +556,11 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
           {auditEvents.length === 0 ? (
             <p className="empty-state">No audit events are recorded yet.</p>
           ) : (
+            <>
+            <MetricBarChart title="Audit events by type" unit=" events" rows={Object.entries(auditEvents.reduce((counts, event) => {
+              counts[event.event_type] = (counts[event.event_type] || 0) + 1
+              return counts
+            }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([label, value]) => ({ label: label.replaceAll('_', ' '), value }))} />
             <div className="message-list admin-record-list">
               {auditEvents.map((event) => (
                 <article className="message-item" key={event.id}>
@@ -538,6 +574,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                 </article>
               ))}
             </div>
+            </>
           )}
         </section>
 
@@ -605,6 +642,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                   <div><span>Peak rate</span><strong>{httpMonitor.peak_requests_per_second} req/s</strong></div>
                 </div>
                 {Object.keys(httpMonitor.status_counts || {}).length > 0 && <MetricBarChart title="API responses by status" unit=" requests" rows={Object.entries(httpMonitor.status_counts).map(([label, value]) => ({ label, value }))} />}
+                {httpMonitor.requests_per_second?.length > 0 && <MetricTrendChart title="API requests over time" unit=" req/s" rows={httpMonitor.requests_per_second.map((value, index) => ({ label: `${index}s`, value }))} />}
                 <p className="admin-analysis-note">{httpMonitor.note}</p>
               </>}
             </article>
@@ -713,6 +751,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                   <div><span>Valid signature</span><strong>{signatureDemo.valid_signature_verified ? 'Accepted' : 'Rejected'}</strong></div>
                   <div><span>Edited message</span><strong>{signatureDemo.modified_message_verified ? 'Accepted' : 'Rejected'}</strong></div>
                 </div>
+                <MetricBarChart title="Ed25519 signing and verification time" unit=" ms" rows={[{ label: 'Sign', value: signatureDemo.signature_generation_time_ms }, { label: 'Verify', value: signatureDemo.verification_time_ms }]} />
                 <p className="analysis-hash-label">Public key</p><code className="analysis-hash-value">{signatureDemo.public_key_base64}</code>
                 <p className="analysis-hash-label">Signature</p><code className="analysis-hash-value">{signatureDemo.signature_base64}</code>
                 <p className="admin-analysis-note">{signatureDemo.note}</p>
@@ -876,7 +915,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                   .filter((run) => run.value !== null)
                 return voiceRuns.length ? (
                   <>
-                    <MetricBarChart title="Recent on-device transcription time" unit=" ms" rows={voiceRuns.slice(0, 5).reverse().map((run, index) => ({ label: `Run ${index + 1}`, value: run.value }))} />
+                    <MetricTrendChart title="Recent on-device transcription time" unit=" ms" rows={voiceRuns.slice().reverse().map((run, index) => ({ label: `Run ${index + 1}`, value: run.value }))} />
                     <div className="admin-table-wrap">
                       <table className="admin-analysis-table"><thead><tr><th>When</th><th>User</th><th>Audio size</th><th>Transcription time</th></tr></thead>
                         <tbody>{voiceRuns.map(({ event, value }) => {
@@ -897,7 +936,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                 const delivered = messageLogs.filter((message) => Number.isFinite(message.transfer_latency_ms))
                 return delivered.length ? (
                   <>
-                    <MetricBarChart title="Recent send-to-receive times" unit=" ms" rows={delivered.slice(0, 8).reverse().map((message, index) => ({ label: `${message.message_type} ${index + 1}`, value: message.transfer_latency_ms }))} />
+                    <MetricTrendChart title="Recent send-to-receive times" unit=" ms" rows={delivered.slice(0, 8).reverse().map((message, index) => ({ label: `${message.message_type} ${index + 1}`, value: message.transfer_latency_ms }))} />
                     <p className="admin-analysis-note">Measured from the server's stored send time until the receiver successfully decrypts and acknowledges the message. Includes waiting and network delay; it is not just AES processing time.</p>
                   </>
                 ) : <p className="empty-state">No completed message transfers have a receive time yet.</p>
@@ -940,6 +979,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                     </table>
                   </div>
                   <MetricBarChart title="Total AES-GCM crypto time by payload size" unit=" ms" rows={benchmark.results.map((row) => ({ label: row.bytes >= 1048576 ? `${(row.bytes / 1048576).toFixed(0)} MiB` : `${Math.round(row.bytes / 1024)} KiB`, value: row.total_crypto_ms }))} />
+                  <MetricTrendChart title="AES-GCM throughput by payload size" unit=" MiB/s" rows={benchmark.results.map((row) => ({ label: row.bytes >= 1048576 ? `${(row.bytes / 1048576).toFixed(0)} MiB` : `${Math.round(row.bytes / 1024)} KiB`, value: row.encryption_mib_per_second }))} />
                   <p className="admin-analysis-note">{benchmark.note}</p>
                 </>
               )}
@@ -990,6 +1030,13 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
           {messageLogs.length === 0 ? (
             <p className="empty-state">No message transfers are recorded yet.</p>
           ) : (
+            <>
+            <MetricBarChart title="Message delivery status" unit=" transfers" rows={[{ label: 'Received', value: messageLogs.filter((message) => Boolean(message.received_at)).length }, { label: 'Awaiting receipt', value: messageLogs.filter((message) => !message.received_at).length }]} />
+            <MetricBarChart title="Transfers by content type" unit=" transfers" rows={Object.entries(messageLogs.reduce((counts, message) => {
+              const type = message.message_type || 'other'
+              counts[type] = (counts[type] || 0) + 1
+              return counts
+            }, {})).map(([label, value]) => ({ label, value }))} />
             <div className="message-list admin-record-list">
               {messageLogs.map((message) => {
                 const details = messageDetails[message.id]
@@ -1108,6 +1155,7 @@ function AdminConsole({ username, onSignOut, theme, onThemeChange }) {
                 )
               })}
             </div>
+            </>
           )}
         </section>
       </section>

@@ -1362,6 +1362,44 @@ textarea,
   text-align: right;
 }
 
+.analysis-trend svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  overflow: visible;
+}
+
+.analysis-trend svg text {
+  fill: #aab6d8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-grid {
+  stroke: rgba(118, 139, 205, 0.22);
+  stroke-dasharray: 3 5;
+}
+
+.trend-fill { fill: rgba(103, 223, 196, 0.11); }
+.trend-line { fill: none; stroke: #67dfc4; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.trend-point { fill: #67dfc4; stroke: #17223e; stroke-width: 2; }
+
+.trend-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #aab6d8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-theme] .analysis-trend svg text,
+html[data-theme] .trend-labels { fill: var(--theme-text); color: var(--theme-text); }
+html[data-theme] .trend-grid { stroke: var(--theme-line); }
+html[data-theme] .trend-line { stroke: var(--theme-accent); }
+html[data-theme] .trend-point { fill: var(--theme-accent); stroke: var(--theme-soft); }
+
 .analysis-hash-label {
   margin: 14px 0 5px !important;
   color: #9caddc !important;

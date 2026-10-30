@@ -41,6 +41,7 @@ class HttpRequestMonitor:
             "request_bytes": 0,
             "response_bytes": 0,
             "peak_requests_per_second": 0,
+            "requests_per_second": [],
             "status_counts": {},
             "started_at": None,
             "duration_seconds": 0,
@@ -103,7 +104,14 @@ class HttpRequestMonitor:
                 self._state["status"] = "complete"
 
     def _snapshot(self) -> dict:
-        return {**self._state, "status_counts": dict(self._state["status_counts"])}
+        snapshot = {**self._state, "status_counts": dict(self._state["status_counts"])}
+        if self._state["status"] != "idle":
+            elapsed = min(
+                self._state["duration_seconds"],
+                max(1, int(self._clock() - self._started) + 1),
+            )
+            snapshot["requests_per_second"] = [self._seconds[index] for index in range(elapsed)]
+        return snapshot
 
     def status(self) -> dict:
         with self._lock:
